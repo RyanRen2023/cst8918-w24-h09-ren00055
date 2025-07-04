@@ -1,34 +1,45 @@
-provider "azurerm" {
-  features {}
+# Generate random resource group name
+resource "random_pet" "rg_name" {
+  prefix = var.resource_group_name_prefix
 }
 
-resource "azurerm_resource_group" "aks_rg" {
-  name     = "aks-h09-rg"
-  location = "East US"
+resource "azurerm_resource_group" "rg" {
+  location = var.resource_group_location
+  name     = random_pet.rg_name.id
 }
 
-resource "azurerm_kubernetes_cluster" "app" {
-  name                = "aks-h09-cluster"
-  location            = azurerm_resource_group.aks_rg.location
-  resource_group_name = azurerm_resource_group.aks_rg.name
-  dns_prefix          = "h09dns"
+resource "random_pet" "azurerm_kubernetes_cluster_name" {
+  prefix = "cluster"
+}
 
-  default_node_pool {
-    name       = "default"
-    vm_size    = "Standard_B2s"
-    node_count = 1
-    min_count  = 1
-    max_count  = 3
-    enable_auto_scaling = true
-  }
+resource "random_pet" "azurerm_kubernetes_cluster_dns_prefix" {
+  prefix = "dns"
+}
+
+resource "azurerm_kubernetes_cluster" "k8s" {
+  location            = azurerm_resource_group.rg.location
+  name                = random_pet.azurerm_kubernetes_cluster_name.id
+  resource_group_name = azurerm_resource_group.rg.name
+  dns_prefix          = random_pet.azurerm_kubernetes_cluster_dns_prefix.id
 
   identity {
     type = "SystemAssigned"
   }
 
-  kubernetes_version = null # use latest available version
+  default_node_pool {
+    name       = "agentpool"
+    vm_size    = "Standard_D2_v2"
+    node_count = var.node_count
+  }
+  linux_profile {
+    admin_username = var.username
 
-  tags = {
-    environment = "dev"
+    ssh_key {
+      key_data = azapi_resource_action.ssh_public_key_gen.output.publicKey
+    }
+  }
+  network_profile {
+    network_plugin    = "kubenet"
+    load_balancer_sku = "standard"
   }
 }
